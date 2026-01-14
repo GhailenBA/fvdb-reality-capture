@@ -16,7 +16,7 @@ from scipy.special import logit
 
 from fvdb_reality_capture.sfm_scene import SfmScene, SpatialScaleMode
 
-from .base_gaussian_splat_optimizer import BaseGaussianSplatOptimizer
+from .base_gaussian_splat_optimizer import BaseGaussianSplatOptimizer, splat_optimizer
 
 
 class InsertionGrad2dThresholdMode(str, Enum):
@@ -213,7 +213,15 @@ class GaussianSplatOptimizerConfig:
     Learning rate for the specular spherical harmonics (order > 0).
     """
 
+    def make_optimizer(self, model: GaussianSplat3d, sfm_scene: SfmScene) -> BaseGaussianSplatOptimizer:
+        return GaussianSplatOptimizer.from_model_and_scene(
+            model=model,
+            sfm_scene=sfm_scene,
+            config=self,
+        )
 
+
+@splat_optimizer
 class GaussianSplatOptimizer(BaseGaussianSplatOptimizer):
     """
     Optimizer for reconstructing a scene using Gaussian Splat radiance fields over a collection of posed images.
@@ -289,6 +297,7 @@ class GaussianSplatOptimizer(BaseGaussianSplatOptimizer):
         # This hook corrects the count even if backward() is called multiple times per iteration.
         self._num_grad_accumulation_steps = 1  # Number of times we've called backward since zeroing the gradients
 
+        @torch.utils.hooks.unserializable_hook
         def _count_accumulation_steps_backward_hook(_):
             self._num_grad_accumulation_steps += 1
 
@@ -458,6 +467,7 @@ class GaussianSplatOptimizer(BaseGaussianSplatOptimizer):
             state_dict (dict[str, Any]): A state dict containing the state of the optimizer.
         """
         return {
+            "name": self.__class__.name(),
             "optimizer": self._optimizer.state_dict(),
             "means_lr_decay_exponent": self._means_lr_decay_exponent,
             "insertion_grad_2d_abs_threshold": self._insertion_grad_2d_abs_threshold,
@@ -635,6 +645,15 @@ class GaussianSplatOptimizer(BaseGaussianSplatOptimizer):
             f"Before refinement model had {num_gaussians_before_refinement:,} Gaussians, after refinement has {num_gaussians_after_refinement:,} Gaussians."
         )
         return {"num_duplicated": num_duplicated, "num_split": num_split, "num_deleted": num_deleted}
+
+    def regularization_loss(self) -> torch.Tensor:
+        """
+        No-op regularization loss for the basic optimizer.
+
+        Returns:
+            regularization_loss (torch.Tensor): A zero tensor.
+        """
+        return torch.zeros((), device=self._model.means.device)
 
     @torch.no_grad()
     def _reset_opacities(self):
