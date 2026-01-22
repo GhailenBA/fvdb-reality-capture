@@ -13,6 +13,7 @@ import sys
 import time
 from typing import Dict, List
 
+import torch
 import yaml
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.parent.resolve()))
@@ -21,7 +22,10 @@ from fvdb_reality_capture.radiance_fields.gaussian_splat_reconstruction_writer i
     GaussianSplatReconstructionWriter,
 )
 
-from .contract import validate_benchmark_yaml
+try:
+    from .contract import validate_benchmark_yaml
+except ImportError:  # Fallback when executed as a script (no package context)
+    from tests.benchmarks.contract import validate_benchmark_yaml
 
 logger = logging.getLogger("train benchmark checkpoints")
 
@@ -104,7 +108,7 @@ def main(
 
     # Load configuration
     config = load_config(config_path)
-    validate_benchmark_yaml(config)
+    validate_benchmark_yaml(config, require_run_paths=False)
 
     # data base path
     data_base_path = config["paths"]["data_base"]
@@ -171,6 +175,11 @@ def main(
         if train:
             run_name = get_run_name(dataset_results_path)
 
+            # Reset GPU memory stats before any GPU operations for accurate peak measurement
+            device = torch.device(training_params.get("device", "cuda"))
+            if device.type == "cuda":
+                torch.cuda.reset_peak_memory_stats(device)
+
             sfm_scene = frc.sfm_scene.SfmScene.from_colmap(dataset_path)
             sfm_scene = frc.transforms.Compose(
                 frc.transforms.NormalizeScene("pca"),
@@ -192,6 +201,15 @@ def main(
             start_time = time.time()
             runner.optimize()
             training_time = time.time() - start_time
+
+            # Query peak GPU memory after training
+            if device.type == "cuda":
+                torch.cuda.synchronize(device)
+                peak_gpu_bytes = torch.cuda.max_memory_allocated(device)
+                peak_gpu_gb = peak_gpu_bytes / (1024**3)
+                # Print in parseable format for run_fvdb_training.py to extract
+                print(f"FVDB_PEAK_GPU_MEMORY_GB: {peak_gpu_gb:.6f}")
+
             logger.info(f"Training completed for {dataset_name} in {training_time:.2f} seconds")
         else:
             logger.info(f"Skipping training for {dataset_name}")
@@ -244,6 +262,14 @@ if __name__ == "__main__":
             help="Path to the benchmark configuration file (default: benchmark_config.yaml)",
         )
         parser.add_argument(
+            "--results-base-path",
+            default="results",
+            help=(
+                "Base directory to write benchmark results to. "
+                "The script will create per-dataset subdirectories under this path."
+            ),
+        )
+        parser.add_argument(
             "--find-checkpoints-run-name",
             help=(
                 "Skip training and look for checkpoints in the specified run directory name, "
@@ -252,4 +278,8 @@ if __name__ == "__main__":
         )
 
         args = parser.parse_args()
-        main(run_name=args.find_checkpoints_run_name, config_path=args.config)
+        main(
+            run_name=args.find_checkpoints_run_name,
+            results_base_path=pathlib.Path(args.results_base_path),
+            config_path=args.config,
+        )
