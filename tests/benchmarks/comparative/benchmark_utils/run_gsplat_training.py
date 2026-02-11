@@ -13,6 +13,71 @@ import fvdb_reality_capture as frc
 
 from ._common import extract_training_metrics, run_command
 
+# Maps FVDB/benchmark config names -> GSplat CLI flags
+# Parameters in YAML config that have a mapping here will be passed to GSplat's simple_trainer.py
+# Parameters without a mapping are NOT passed and will use GSplat's defaults
+GSPLAT_PARAM_MAPPING: dict[str, str] = {
+    # Initialization parameters
+    "initial_opacity": "--init_opa",
+    "initial_covariance_scale": "--init_scale",
+    # Regularization (FVDB naming -> GSplat CLI flags)
+    "opacity_regularization": "--opacity_reg",
+    "scale_regularization": "--scale_reg",
+    # Rendering parameters
+    "near_plane": "--near_plane",
+    "far_plane": "--far_plane",
+    "antialias": "--antialiased",  # Note: different naming convention
+    "random_bkgd": "--random_bkgd",
+    "ssim_lambda": "--ssim_lambda",
+    "sh_degree": "--sh_degree",
+    # Training parameters
+    "batch_size": "--batch_size",
+    # Camera pose optimization
+    "optimize_camera_poses": "--pose_opt",  # Note: different naming convention
+    "pose_opt_lr": "--pose_opt_lr",
+    "pose_opt_reg": "--pose_opt_reg",
+    # Learning rates
+    "means_lr": "--means_lr",
+    "scales_lr": "--scales_lr",
+    "opacities_lr": "--opacities_lr",
+    "quats_lr": "--quats_lr",
+    "sh0_lr": "--sh0_lr",
+    "shN_lr": "--shN_lr",
+}
+
+
+def build_gsplat_cli_args(opt_config: dict[str, Any]) -> list[str]:
+    """
+    Build CLI arguments from opt_config using the parameter mapping.
+
+    Extracts training config values from the optimization config and converts them
+    to GSplat CLI flags using GSPLAT_PARAM_MAPPING. Boolean values are handled
+    specially - only True values result in the flag being added.
+
+    Args:
+        opt_config: The optimization configuration dictionary loaded from YAML.
+            Expected structure: {"training": {"config": {...parameters...}}}
+
+    Returns:
+        List of CLI argument strings ready to be appended to the command.
+    """
+    args: list[str] = []
+    training_config = opt_config.get("training", {}).get("config", {})
+
+    for config_key, cli_flag in GSPLAT_PARAM_MAPPING.items():
+        if config_key in training_config:
+            value = training_config[config_key]
+            # Handle boolean flags - only add if True.
+            # Note: All current boolean params (antialiased, random_bkgd, pose_opt) default
+            # to False in GSplat, so not passing them when False achieves the desired behavior.
+            if isinstance(value, bool):
+                if value:
+                    args.append(cli_flag)
+            else:
+                args.extend([cli_flag, str(value)])
+
+    return args
+
 
 def run_gsplat_training(
     scene_name: str,
@@ -91,6 +156,7 @@ def run_gsplat_training(
     refine_start_steps = params["refine_start_steps"]
     refine_stop_steps = params["refine_stop_steps"]
     refine_every_steps = params["refine_every_steps"]
+    sh_degree_interval_steps = params["sh_degree_interval_steps"]
 
     # Calculate reset_every_steps (convert reset_opacities_every_epoch to steps)
     reset_opacities_every_epoch = 16  # From benchmark_config.yaml
@@ -107,6 +173,7 @@ def run_gsplat_training(
     logging.info(f"  refine_stop_steps: {refine_stop_steps}")
     logging.info(f"  refine_every_steps: {refine_every_steps}")
     logging.info(f"  reset_every_steps: {reset_every_steps}")
+    logging.info(f"  sh_degree_interval_steps: {sh_degree_interval_steps}")
     logging.info(f"  Training images: {training_images}")
     logging.info(f"  Total images: {params.get('total_images', 'N/A')}")
 
@@ -157,6 +224,9 @@ def run_gsplat_training(
             str(gsplat_result_dir),
             "--max_steps",
             str(max_steps),  # Full training
+            # SH degree schedule to match FVDB
+            "--sh_degree_interval",
+            str(sh_degree_interval_steps),
             # densification parameters to match FVDB
             "--strategy.refine_start_iter",
             str(refine_start_steps),
@@ -180,6 +250,15 @@ def run_gsplat_training(
                 "1",  # Disable 2D scale-based splitting to match FVDB behavior
             ]
         )
+
+    # Add parameters from YAML config using the parameter mapping
+    mapped_args = build_gsplat_cli_args(opt_config)
+    if mapped_args:
+        cmd.extend(mapped_args)
+        logging.info(f"GSplat mapped parameters from config: {' '.join(mapped_args)}")
+    else:
+        logging.info("No additional parameters mapped from config")
+
     if extra_cli_args:
         if not isinstance(extra_cli_args, list) or not all(isinstance(x, str) for x in extra_cli_args):
             raise ValueError("extra_cli_args must be a list[str]")
@@ -196,7 +275,7 @@ def run_gsplat_training(
     stop_event = _threading.Event()
 
     def _watch_training_start(log_path: str, pattern: str, started_flag: dict, stop_evt: _threading.Event):
-        """
+        r"""
         Background thread that monitors the training log for the first training step.
 
         Watches the training log file for a line matching the given pattern (typically
@@ -205,7 +284,8 @@ def run_gsplat_training(
 
         Args:
             log_path (str): Path to the training log file to monitor.
-            pattern (str): Regex pattern to search for (e.g., r"Step\s+\d+").
+            pattern (str): Regex pattern to search for (e.g., ``r"Step\s+\d+"``).
+
             started_flag (dict): Dictionary with "t" key to store the training start timestamp.
                 Set to None initially, updated when pattern is found.
             stop_evt (_threading.Event): Event to signal thread to stop monitoring.

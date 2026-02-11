@@ -8,6 +8,7 @@ Extract training parameters from benchmark_config.yaml for use in both FVDB and 
 
 import argparse
 import logging
+import math
 import sys
 from pathlib import Path
 
@@ -81,6 +82,7 @@ def extract_training_params(config: dict, scene: str) -> dict:
         "refine_start_epoch": training_config.get("refine_start_epoch", 3),
         "refine_stop_epoch": training_config.get("refine_stop_epoch", 100),
         "refine_every_epoch": training_config.get("refine_every_epoch", 0.75),
+        "increase_sh_degree_every_epoch": training_config.get("increase_sh_degree_every_epoch", 5),
         "sh_degree": training_config.get("sh_degree", 3),
         "initial_opacity": training_config.get("initial_opacity", 0.1),
         "initial_covariance_scale": training_config.get("initial_covariance_scale", 1.0),
@@ -125,14 +127,22 @@ def extract_training_params(config: dict, scene: str) -> dict:
     # Calculate training images (excluding validation images) - same for both frameworks
     training_images = total_images - validation_images
 
-    # Calculate steps: epochs * number of training images (same for both frameworks)
+    # Calculate steps per epoch using the same formula as FVDB:
+    #   ceil(training_images / batch_size) when batch_size > 1, else training_images
+    # This ensures GSplat step counts match FVDB scheduling when batch_size != 1.
     max_epochs = params["max_epochs"]
+    batch_size = params["batch_size"]
+    if batch_size > 1:
+        steps_per_epoch = math.ceil(training_images / batch_size)
+    else:
+        steps_per_epoch = training_images
 
     # Both FVDB and GSplat use the same step calculation for fair comparison
-    max_steps = max_epochs * training_images
-    refine_start_steps = int(params["refine_start_epoch"] * training_images)
-    refine_stop_steps = int(params["refine_stop_epoch"] * training_images)
-    refine_every_steps = int(params["refine_every_epoch"] * training_images)
+    max_steps = max_epochs * steps_per_epoch
+    refine_start_steps = int(params["refine_start_epoch"] * steps_per_epoch)
+    refine_stop_steps = int(params["refine_stop_epoch"] * steps_per_epoch)
+    refine_every_steps = int(params["refine_every_epoch"] * steps_per_epoch)
+    sh_degree_interval_steps = int(params["increase_sh_degree_every_epoch"] * steps_per_epoch)
 
     # Add calculated step values
     params.update(
@@ -144,6 +154,7 @@ def extract_training_params(config: dict, scene: str) -> dict:
             "refine_start_steps": refine_start_steps,
             "refine_stop_steps": refine_stop_steps,
             "refine_every_steps": refine_every_steps,
+            "sh_degree_interval_steps": sh_degree_interval_steps,
             # For backward compatibility
             "num_images": total_images,
             "fvdb_training_images": training_images,
