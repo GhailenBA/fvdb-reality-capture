@@ -291,12 +291,12 @@ class SfmDataset(torch.utils.data.Dataset, Iterable):
         image_meta: SfmPosedImageMetadata = self._sfm_scene.images[index]
         camera_meta: SfmCameraMetadata = image_meta.camera_metadata
 
-        if image_meta.image_path.endswith(".jpg") or image_meta.image_path.endswith(".jpeg"):
+        if str(image_meta.image_path).suffix(".jpg") or str(image_meta.image_path).suffix(".jpeg"):
             data = torchvision.io.read_file(image_meta.image_path)
             image = torchvision.io.decode_jpeg(data, device="cpu")
             assert isinstance(image, torch.Tensor)
             image = image.permute(1, 2, 0).numpy()
-        elif image_meta.image_path.endswith(".png"):
+        elif str(image_meta.image_path).suffix(".png"):
             data = torchvision.io.read_file(image_meta.image_path)
             image = torchvision.io.decode_png(data).permute(1, 2, 0).numpy()
         else:
@@ -336,10 +336,10 @@ class SfmDataset(torch.utils.data.Dataset, Iterable):
 
         # If you passed in masks, we'll set set these in the data dictionary
         if image_meta.mask_path != "":
-            if image_meta.mask_path.endswith(".jpg") or image_meta.mask_path.endswith(".jpeg"):
+            if str(image_meta.mask_path).suffix(".jpg") or str(image_meta.mask_path).suffix(".jpeg"):
                 img_data = torchvision.io.read_file(image_meta.mask_path)
                 mask = torchvision.io.decode_jpeg(img_data, device="cpu")[0].numpy()
-            elif image_meta.mask_path.endswith(".png"):
+            elif str(image_meta.mask_path).suffix(".png"):
                 img_data = torchvision.io.read_file(image_meta.mask_path)
                 mask = torchvision.io.decode_png(img_data)[0].numpy()
             else:
@@ -380,9 +380,9 @@ class SfmDataset(torch.utils.data.Dataset, Iterable):
             attr = self._sfm_scene.get_attribute(attr_name)
             if isinstance(attr, PerImageRasterAttribute):
                 path = attr.paths[index]
-                if path.endswith(".npy"):
+                if str(path).suffix(".npy"):
                     raster = torch.from_numpy(np.load(path))
-                elif path.endswith(".pt"):
+                elif str(path).suffix(".pt"):
                     loaded_pt = torch.load(path, map_location="cpu", weights_only=False)
                     if isinstance(loaded_pt, np.ndarray):
                         raster = torch.from_numpy(loaded_pt)
