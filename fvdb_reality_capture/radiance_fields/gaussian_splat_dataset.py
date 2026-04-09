@@ -291,12 +291,12 @@ class SfmDataset(torch.utils.data.Dataset, Iterable):
         image_meta: SfmPosedImageMetadata = self._sfm_scene.images[index]
         camera_meta: SfmCameraMetadata = image_meta.camera_metadata
 
-        if str(image_meta.image_path).suffix(".jpg") or str(image_meta.image_path).suffix(".jpeg"):
+        if image_meta.image_path.endswith(".jpg") or image_meta.image_path.endswith(".jpeg"):
             data = torchvision.io.read_file(image_meta.image_path)
             image = torchvision.io.decode_jpeg(data, device="cpu")
             assert isinstance(image, torch.Tensor)
             image = image.permute(1, 2, 0).numpy()
-        elif str(image_meta.image_path).suffix(".png"):
+        elif image_meta.image_path.endswith(".png"):
             data = torchvision.io.read_file(image_meta.image_path)
             image = torchvision.io.decode_png(data).permute(1, 2, 0).numpy()
         else:
@@ -336,10 +336,10 @@ class SfmDataset(torch.utils.data.Dataset, Iterable):
 
         # If you passed in masks, we'll set set these in the data dictionary
         if image_meta.mask_path != "":
-            if str(image_meta.mask_path).suffix(".jpg") or str(image_meta.mask_path).suffix(".jpeg"):
+            if str(image_meta.mask_path).endswith(".jpg") or str(image_meta.mask_path).endswith(".jpeg"):
                 img_data = torchvision.io.read_file(image_meta.mask_path)
                 mask = torchvision.io.decode_jpeg(img_data, device="cpu")[0].numpy()
-            elif str(image_meta.mask_path).suffix(".png"):
+            elif str(image_meta.mask_path).endswith(".png"):
                 img_data = torchvision.io.read_file(image_meta.mask_path)
                 mask = torchvision.io.decode_png(img_data)[0].numpy()
             else:
@@ -347,7 +347,7 @@ class SfmDataset(torch.utils.data.Dataset, Iterable):
                 assert mask is not None, f"Failed to load mask: {image_meta.mask_path}"
             mask = mask > 127
 
-            data["mask_path"] = image_meta.mask_path
+            data["mask_path"] = str(image_meta.mask_path)
             data["mask"] = mask
 
         # If you asked to load depths, we'll load the depths of visible colmap points
@@ -380,9 +380,9 @@ class SfmDataset(torch.utils.data.Dataset, Iterable):
             attr = self._sfm_scene.get_attribute(attr_name)
             if isinstance(attr, PerImageRasterAttribute):
                 path = attr.paths[index]
-                if str(path).suffix(".npy"):
+                if path.endswith(".npy"):
                     raster = torch.from_numpy(np.load(path))
-                elif str(path).suffix(".pt"):
+                elif path.endswith(".pt"):
                     loaded_pt = torch.load(path, map_location="cpu", weights_only=False)
                     if isinstance(loaded_pt, np.ndarray):
                         raster = torch.from_numpy(loaded_pt)
