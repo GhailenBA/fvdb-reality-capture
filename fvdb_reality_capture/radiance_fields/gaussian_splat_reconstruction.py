@@ -1135,14 +1135,14 @@ class GaussianSplatReconstruction:
         """
         if self.optimizer is None:
             raise ValueError("This runner was not created with an optimizer. Cannot run reconstruction.")
-
+        # Adjust dataloader to docker
         trainloader = torch.utils.data.DataLoader(
             self.training_dataset,
             batch_size=self.config.batch_size,
             shuffle=True,
-            num_workers=8,
-            persistent_workers=True,
-            pin_memory=True,
+            num_workers=0,
+            #persistent_workers=True,
+            #pin_memory=True,
         )
 
         if self.config.batch_size > 1:
