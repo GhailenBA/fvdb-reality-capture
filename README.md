@@ -1,6 +1,6 @@
 # Welcome to fVDB-Reality-Capture!
 
-fVDB-Reality-Capture is a reality-capture toolbox built on top of [fVDB](https://fvdb.ai). It
+fVDB-Reality-Capture is a reality-capture toolbox built on top of [fVDB](https://fvdb-core.readthedocs.io). It
 provides high-level abstractions and APIs for common reality capture tasks, such as loading sensor data, reconstructing
 radiance fields, extracting meshes and point clouds, visualization, and exporting results across standard formats such
 as PLY and USDZ.
@@ -17,7 +17,7 @@ The videos below show large-scale reconstructions of complex scenes using fVDB-R
 ----
 
 **For more information about what fVDB-Reality-Capture can do, tutorials and documentation, please see the
-[fVDB-Reality-Capture documentation](https://fvdb.ai/reality-capture/).**
+[fVDB-Reality-Capture documentation](https://fvdb-reality-capture.readthedocs.io).**
 
 
 
@@ -26,7 +26,7 @@ The videos below show large-scale reconstructions of complex scenes using fVDB-R
 The `fvdb-reality-capture` Python package can be installed using published packages with pip or built from source.
 
 For the most up-to-date information on installing fVDB-Reality-Capture's pip packages, please see the
-[installation documentation](https://fvdb.ai/reality-capture/installation.html).
+[installation documentation](https://fvdb-reality-capture.readthedocs.io/installation.html).
 
 ### Installation from source
 
