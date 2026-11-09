@@ -130,6 +130,7 @@ class SfmDataset(torch.utils.data.Dataset, Iterable):
     @staticmethod
     def _decode_raster(path: str, *, is_mask: bool) -> torch.Tensor:
         """Decode an image or mask into a contiguous CPU tensor."""
+        path = str(path)  # SfM metadata may hold pathlib.Path objects
         path_lower = path.lower()
         if path_lower.endswith((".jpg", ".jpeg", ".png")):
             encoded = torchvision.io.read_file(path)
@@ -425,7 +426,7 @@ class SfmDataset(torch.utils.data.Dataset, Iterable):
             else:
                 mask = self._decode_mask(image_meta.mask_path).numpy()
 
-            data["mask_path"] = image_meta.mask_path
+            data["mask_path"] = str(image_meta.mask_path)
             data["mask"] = mask
 
         # If you asked to load depths, we'll load the depths of visible colmap points

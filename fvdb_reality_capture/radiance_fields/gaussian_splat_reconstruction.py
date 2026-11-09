@@ -1294,9 +1294,10 @@ class GaussianSplatReconstruction:
             self.training_dataset,
             batch_size=self.config.batch_size,
             shuffle=True,
-            num_workers=8,
-            persistent_workers=True,
-            pin_memory=True,
+            # Adjust dataloader to docker
+            num_workers=0,
+            # persistent_workers=True,
+            # pin_memory=True,
             collate_fn=(
                 _collate_cached_sfm_batch
                 if self.config.batch_size == 1 and self.training_dataset.images_cached
